@@ -1,0 +1,15 @@
+[project]
+name = "ml-serve"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.138.0",
+    "torch>=2.2,<3",
+    "transformers>=5.12.1",
+    "uvicorn[standard]>=0.49.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+]

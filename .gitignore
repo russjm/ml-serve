@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# uv / venv
+.venv/
+.python-version
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Model + HF caches
+.cache/
+.hf_cache/
+model_local/
+*.safetensors
+*.bin
+
+# Bench artifacts
+bench/results/
+docs/screenshots/*.png
+
+# Notes
+notes/
+
+# Secrets
+.env
+.env.*
+!.env.example
