@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
+from serve.batcher import DynamicBatcher
 from serve.model import ModelRunner
 
 
@@ -24,9 +25,12 @@ class HealthResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.runner = ModelRunner()
-    app.state.model_id = getattr(app.state.runner.model.config, "_name_or_path", "unknown")
+    runner = ModelRunner()
+    app.state.model_id = getattr(runner.model.config, "_name_or_path", "unknown")
+    app.state.batcher = DynamicBatcher(runner)
+    app.state.batcher.start()
     yield
+    await app.state.batcher.stop()
 
 
 app = FastAPI(title="ml-serve", version="0.1.0", lifespan=lifespan)
@@ -40,6 +44,6 @@ async def health() -> HealthResponse:
 @app.post("/predict", response_model=PredictResponse)
 async def predict(req: PredictRequest) -> PredictResponse:
     t0 = time.perf_counter()
-    pred = app.state.runner.forward([req.text])[0]
+    pred = await app.state.batcher.enqueue(req.text)
     latency_ms = (time.perf_counter() - t0) * 1000
     return PredictResponse(label=pred.label, score=pred.score, latency_ms=latency_ms)
