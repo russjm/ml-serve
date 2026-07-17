@@ -35,6 +35,13 @@ Measured on M3, single worker, no batching or caching. 50 sequential requests, 5
 
 Details in `benchmarks/baseline.md`.
 
+## Batching
+
+The server groups concurrent requests into one forward pass. Two env vars control it: `MAX_BATCH_SIZE` and `MAX_WAIT_MS`, whichever comes first triggers a flush.
+
+Batch size 8 was fastest at 205 req/s under 64 concurrent clients, about 3.8x the no-batching case.
+Details in `benchmarks/phase1_batching.md`.
+
 ## Model
 
 Uses the pretrained `distilbert-base-uncased-finetuned-sst-2-english` checkpoint from HF. To use fine-tuned weights:
