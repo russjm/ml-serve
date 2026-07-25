@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from serve.batcher import DynamicBatcher
+from serve.cache import RedisCache
 from serve.model import ModelRunner
 
 
@@ -16,6 +17,7 @@ class PredictResponse(BaseModel):
     label: str
     score: float
     latency_ms: float
+    cached: bool
 
 
 class HealthResponse(BaseModel):
@@ -28,9 +30,11 @@ async def lifespan(app: FastAPI):
     runner = ModelRunner()
     app.state.model_id = getattr(runner.model.config, "_name_or_path", "unknown")
     app.state.batcher = DynamicBatcher(runner)
+    app.state.cache = RedisCache()
     app.state.batcher.start()
     yield
     await app.state.batcher.stop()
+    await app.state.cache.close()
 
 
 app = FastAPI(title="ml-serve", version="0.1.0", lifespan=lifespan)
@@ -44,6 +48,12 @@ async def health() -> HealthResponse:
 @app.post("/predict", response_model=PredictResponse)
 async def predict(req: PredictRequest) -> PredictResponse:
     t0 = time.perf_counter()
-    pred = await app.state.batcher.enqueue(req.text)
+    pred = await app.state.cache.get(req.text)
+    cached = pred is not None
+    if not cached:
+        pred = await app.state.batcher.enqueue(req.text)
+        await app.state.cache.set(req.text, pred)
     latency_ms = (time.perf_counter() - t0) * 1000
-    return PredictResponse(label=pred.label, score=pred.score, latency_ms=latency_ms)
+    return PredictResponse(
+        label=pred.label, score=pred.score, latency_ms=latency_ms, cached=cached
+    )
