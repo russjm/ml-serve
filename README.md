@@ -21,9 +21,10 @@ curl -X POST localhost:8765/predict \
 ### Docker
 
 ```bash
-docker build -t ml-serve .
-docker run -p 8000:8000 ml-serve
+docker compose up --build
 ```
+
+Runs the server on port 8000 plus Redis.
 
 ## Baseline latency
 
@@ -41,6 +42,12 @@ The server groups concurrent requests into one forward pass. Two env vars contro
 
 Batch size 8 was fastest at 205 req/s under 64 concurrent clients, about 3.8x the no-batching case.
 Details in `benchmarks/phase1_batching.md`.
+
+## Caching
+
+Predictions are cached in Redis, keyed by a hash of the input text with a 1 hour TTL. A hit skips the model and returns in a few milliseconds; if Redis is down the server logs a warning and serves every request from the model.
+
+At 90% repeated inputs, throughput was 1980 req/s, 6.3x the all-miss case. Details in `benchmarks/phase2_cache.md`.
 
 ## Model
 
