@@ -1,9 +1,11 @@
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 
+from serve import metrics
 from serve.batcher import DynamicBatcher
 from serve.cache import RedisCache
 from serve.model import ModelRunner
@@ -45,6 +47,11 @@ async def health() -> HealthResponse:
     return HealthResponse(status="ok", model=app.state.model_id)
 
 
+@app.get("/metrics")
+async def prometheus_metrics() -> Response:
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
 @app.post("/predict", response_model=PredictResponse)
 async def predict(req: PredictRequest) -> PredictResponse:
     t0 = time.perf_counter()
@@ -53,7 +60,10 @@ async def predict(req: PredictRequest) -> PredictResponse:
     if not cached:
         pred = await app.state.batcher.enqueue(req.text)
         await app.state.cache.set(req.text, pred)
-    latency_ms = (time.perf_counter() - t0) * 1000
+    elapsed = time.perf_counter() - t0
+    outcome = "hit" if cached else "miss"
+    metrics.predict_requests.labels(cache=outcome).inc()
+    metrics.predict_latency.labels(cache=outcome).observe(elapsed)
     return PredictResponse(
-        label=pred.label, score=pred.score, latency_ms=latency_ms, cached=cached
+        label=pred.label, score=pred.score, latency_ms=elapsed * 1000, cached=cached
     )
