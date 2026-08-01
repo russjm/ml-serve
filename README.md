@@ -24,8 +24,6 @@ curl -X POST localhost:8765/predict \
 docker compose up --build
 ```
 
-Runs the server on port 8000 plus Redis.
-
 ## Baseline latency
 
 Measured on M3, single worker, no batching or caching. 50 sequential requests, 5 warmup discarded.
@@ -48,6 +46,12 @@ Details in `benchmarks/phase1_batching.md`.
 Predictions are cached in Redis, keyed by a hash of the input text with a 1 hour TTL. A hit skips the model and returns in a few milliseconds; if Redis is down the server logs a warning and serves every request from the model.
 
 At 90% repeated inputs, throughput was 1980 req/s, 6.3x the all-miss case. Details in `benchmarks/phase2_cache.md`.
+
+## Observability
+
+The server exposes Prometheus metrics at `/metrics`: request count and end-to-end latency (both split by cache hit or miss), batch size, batcher queue depth, inference time, and Redis errors.
+
+Prometheus scrapes every 5 seconds. Grafana loads its datasource and dashboard from `observability/grafana/`, so the dashboard is checked in rather than set up by hand.
 
 ## Model
 
