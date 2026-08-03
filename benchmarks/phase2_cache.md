@@ -33,9 +33,11 @@ slower than the all-miss case.
 
 My first runs showed 90% repeats topping out at 201 req/s, barely above the all-miss case, with
 165 ms P50 even for hits. The server wasn't the limit: a single-process asyncio client capped
-out around 210-330 req/s regardless of what the server did. Two client processes at half the
-concurrency nearly doubled throughput, confirming it. All numbers above use 4 client processes;
-throughput is summed and latencies are merged across them.
+out around 210-330 req/s regardless of what the server did. A pure-hit run made it obvious: 209
+req/s at concurrency 64, but 998 req/s at concurrency 8, which only happens if the client is the
+constraint. Two client processes at half the concurrency nearly doubled throughput, confirming
+it. All numbers above use 4 client processes; throughput is summed and latencies are merged
+across them.
 
 This also means the phase 1 numbers are understated: the same single-process client measured
 batch size 8 at 205 req/s, right at the client's own ceiling. With the 4-process client the

@@ -24,6 +24,8 @@ curl -X POST localhost:8765/predict \
 docker compose up --build
 ```
 
+Runs four services: the server on 8000, Redis, Prometheus on 9090, and Grafana on 3000.
+
 ## Baseline latency
 
 Measured on M3, single worker, no batching or caching. 50 sequential requests, 5 warmup discarded.
@@ -38,14 +40,17 @@ Details in `benchmarks/baseline.md`.
 
 The server groups concurrent requests into one forward pass. Two env vars control it: `MAX_BATCH_SIZE` and `MAX_WAIT_MS`, whichever comes first triggers a flush.
 
-Batch size 8 was fastest at 205 req/s under 64 concurrent clients, about 3.8x the no-batching case.
-Details in `benchmarks/phase1_batching.md`.
+Batch size 8 was fastest at 205 req/s under 64 concurrent clients, about 3.8x the no-batching case. That 3.8x needs re-measuring: the single-process load generator behind it caps around 210 req/s, so the peak was clipped and the slower batch sizes weren't. Details and the correction in `benchmarks/phase1_batching.md`.
 
 ## Caching
 
 Predictions are cached in Redis, keyed by a hash of the input text with a 1 hour TTL. A hit skips the model and returns in a few milliseconds; if Redis is down the server logs a warning and serves every request from the model.
 
 At 90% repeated inputs, throughput was 1980 req/s, 6.3x the all-miss case. Details in `benchmarks/phase2_cache.md`.
+
+## Benchmark methodology
+
+I checked these numbers against Agrawal et al., *On Evaluating Performance of LLM Inference Systems* ([arXiv:2507.09019](https://arxiv.org/abs/2507.09019)), and wrote up which of its eight evaluation anti-patterns apply to a non-autoregressive encoder, plus where my own methodology falls short: [Auditing my own inference-server benchmarks](https://gist.github.com/russjm/a0b6dbbf8dcecbbabe0bd3ea63b74032).
 
 ## Observability
 

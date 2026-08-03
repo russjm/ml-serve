@@ -9,6 +9,13 @@ rotating through 10 short sample sentences (~6–9 tokens each).
 
 `MAX_BATCH_SIZE=1` is the no-batching control: every request is its own forward pass.
 
+**Correction:** the peak below is capped by the load generator, not the server.
+`bench/microbench.py` is a single asyncio process that tops out around 210 req/s at concurrency
+64, so the 205 req/s measurement was clipped while the slower batch sizes weren't. The same
+server config reached 315 req/s under the 4-process client in `phase2_cache.md`. The real ratio
+is probably higher than 3.8x, but "batch size 8 is optimal" compares one truncated point against
+four untruncated ones, so the whole sweep needs re-running with a multi-process client.
+
 ## Results
 
 | MAX_BATCH_SIZE | Throughput (req/s) | P50 (ms) | P95 (ms) | P99 (ms) |
@@ -38,7 +45,14 @@ to 205 req/s). The ordering held across runs.
 
 ## Reproduce
 
+These numbers predate the Redis cache (measured at `be91425`; the cache landed in `769544c`).
+On the current server every request checks Redis before the batcher, and `microbench.py` rotates
+through 10 fixed sentences, so nearly everything is a cache hit and the batcher never runs. To
+reproduce what's in the table:
+
 ```bash
+git checkout be91425
+
 # In one terminal, start the server with a chosen batch size:
 MAX_BATCH_SIZE=8 uv run uvicorn serve.app:app --host 127.0.0.1 --port 8765
 
