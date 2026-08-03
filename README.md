@@ -18,6 +18,10 @@ curl -X POST localhost:8765/predict \
   -d '{"text":"this movie was great"}'
 ```
 
+```json
+{"label": "POSITIVE", "score": 0.9999, "latency_ms": 32.7, "cached": false}
+```
+
 ### Docker
 
 ```bash
@@ -26,31 +30,41 @@ docker compose up --build
 
 Runs four services: the server on 8000, Redis, Prometheus on 9090, and Grafana on 3000.
 
-## Baseline latency
+### Tests
 
-Measured on M3, single worker, no batching or caching. 50 sequential requests, 5 warmup discarded.
+```bash
+uv run pytest
+```
 
-| P50 | P95 | P99 |
+## How it works
+
+Concurrent requests are grouped into one forward pass, flushed when `MAX_BATCH_SIZE` requests are queued or `MAX_WAIT_MS` elapses, whichever comes first.
+
+Predictions are cached in Redis, keyed by a hash of the input text. A hit skips the model entirely. If Redis is down the server logs a warning and serves every request from the model.
+
+## Configuration
+
+| Variable | Default | What it does |
 | --- | --- | --- |
-| 17.6 ms | 20.1 ms | 20.7 ms |
+| `MAX_BATCH_SIZE` | `32` | Requests per forward pass |
+| `MAX_WAIT_MS` | `10` | How long the batcher waits before flushing a partial batch |
+| `REDIS_URL` | `redis://localhost:6379/0` | Cache location |
+| `CACHE_TTL_S` | `3600` | Prediction TTL |
+| `MODEL_PATH` | HF checkpoint | Local model directory to load instead |
 
-Details in `benchmarks/baseline.md`.
+## Benchmarks
 
-## Batching
+All on an M3, single uvicorn worker, CPU.
 
-The server groups concurrent requests into one forward pass. Two env vars control it: `MAX_BATCH_SIZE` and `MAX_WAIT_MS`, whichever comes first triggers a flush.
+| Config | Throughput | P50 | P99 |
+| --- | --- | --- | --- |
+| Sequential, no batching or cache | — | 17.6 ms | 20.7 ms |
+| Batching (size 8), 64 clients | 205 req/s | 112 ms | 2054 ms |
+| Cache at 90% repeats, 64 clients | 1980 req/s | 3.8 ms | 214 ms |
 
-Batch size 8 was fastest at 205 req/s under 64 concurrent clients, about 3.8x the no-batching case. That 3.8x needs re-measuring: the single-process load generator behind it caps around 210 req/s, so the peak was clipped and the slower batch sizes weren't. Details and the correction in `benchmarks/phase1_batching.md`.
+Batching was about 3.8x the no-batching case, and the cache about 6.3x the all-miss case. That 3.8x needs re-measuring: the single-process load generator behind it caps around 210 req/s, so the peak was clipped and the slower batch sizes weren't. Details and the correction in `benchmarks/`.
 
-## Caching
-
-Predictions are cached in Redis, keyed by a hash of the input text with a 1 hour TTL. A hit skips the model and returns in a few milliseconds; if Redis is down the server logs a warning and serves every request from the model.
-
-At 90% repeated inputs, throughput was 1980 req/s, 6.3x the all-miss case. Details in `benchmarks/phase2_cache.md`.
-
-## Benchmark methodology
-
-I checked these numbers against Agrawal et al., *On Evaluating Performance of LLM Inference Systems* ([arXiv:2507.09019](https://arxiv.org/abs/2507.09019)), and wrote up which of its eight evaluation anti-patterns apply to a non-autoregressive encoder, plus where my own methodology falls short: [Auditing my own inference-server benchmarks](https://gist.github.com/russjm/a0b6dbbf8dcecbbabe0bd3ea63b74032).
+I also checked these numbers against Agrawal et al., *On Evaluating Performance of LLM Inference Systems* ([arXiv:2507.09019](https://arxiv.org/abs/2507.09019)): [Auditing my own inference-server benchmarks](https://gist.github.com/russjm/ce38dde600b1aae380a2c9949bfd8093).
 
 ## Observability
 
@@ -65,3 +79,7 @@ Uses the pretrained `distilbert-base-uncased-finetuned-sst-2-english` checkpoint
 1. Run `train/train_distilbert.ipynb` on Colab
 2. Download the model directory to `./model_local/`
 3. Start the server with `MODEL_PATH=./model_local`
+
+## License
+
+MIT
