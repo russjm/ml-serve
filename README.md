@@ -1,6 +1,6 @@
 # ml-serve
 
-A small Triton/BentoML-style model server built from scratch to explore production ML infrastructure.
+A small Triton/BentoML-style model server built from scratch to explore production ML infrastructure. Serves a DistilBERT sentiment classifier on CPU.
 
 ## Setup
 
@@ -56,13 +56,15 @@ Predictions are cached in Redis, keyed by a hash of the input text. A hit skips 
 
 All on an M3, single uvicorn worker, CPU.
 
-| Config | Throughput | P50 | P99 |
-| --- | --- | --- | --- |
-| Sequential, no batching or cache | — | 17.6 ms | 20.7 ms |
-| Batching (size 8), 64 clients | 205 req/s | 112 ms | 2054 ms |
-| Cache at 90% repeats, 64 clients | 1980 req/s | 3.8 ms | 214 ms |
+| Config | Load generator | Throughput | P50 | P99 |
+| --- | --- | --- | --- | --- |
+| No batching or cache | sequential | — | 17.6 ms | 20.7 ms |
+| No batching (size 1), 64 clients | 1 process | 53.3 req/s | 1136 ms | 1672 ms |
+| Batching (size 8), 64 clients | 1 process | 205 req/s | 112 ms | 2054 ms |
+| Cache all-miss, 64 clients | 4 processes | 315 req/s | 187 ms | 366 ms |
+| Cache at 90% repeats, 64 clients | 4 processes | 1980 req/s | 3.8 ms | 214 ms |
 
-Batching was about 3.8x the no-batching case, and the cache about 6.3x the all-miss case. That 3.8x needs re-measuring: the single-process load generator behind it caps around 210 req/s, so the peak was clipped and the slower batch sizes weren't. Details and the correction in `benchmarks/`.
+Batching was about 3.8x the no-batching case, and the cache about 6.3x the all-miss case. Throughput isn't comparable across the load generator column: the single-process client caps around 210 req/s, which clipped the batching peak but not the slower batch sizes, so that 3.8x needs re-measuring. Details and the correction in `benchmarks/`.
 
 I also checked these numbers against Agrawal et al., *On Evaluating Performance of LLM Inference Systems* ([arXiv:2507.09019](https://arxiv.org/abs/2507.09019)): [Auditing my own inference-server benchmarks](https://gist.github.com/russjm/ce38dde600b1aae380a2c9949bfd8093).
 
