@@ -30,6 +30,9 @@ docs/screenshots/*.png
 # Notes
 notes/
 CLAUDE.md
+AUDIT.md
+gist-benchmark-audit.md
+paper-antipatterns.pdf
 
 # Secrets
 .env
