@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: serve-config
+data:
+  MAX_BATCH_SIZE: "32"
+  MAX_WAIT_MS: "10"
+  CACHE_TTL_S: "3600"
+  REDIS_URL: redis://redis:6379/0
+  # matches the 1-cpu limit in serve.yaml
+  TORCH_THREADS: "1"
+  OMP_NUM_THREADS: "1"
