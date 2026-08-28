@@ -6,6 +6,7 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 DEFAULT_MODEL = "distilbert-base-uncased-finetuned-sst-2-english"
 MAX_TOKENS = 256
+TORCH_THREADS = int(os.environ.get("TORCH_THREADS", "0"))
 
 
 @dataclass
@@ -22,6 +23,10 @@ class ModelRunner:
         self.model.eval()
         self.device = torch.device("cpu")
         self.model.to(self.device)
+
+        if TORCH_THREADS:
+            torch.set_num_threads(TORCH_THREADS)
+
         self.id2label = self.model.config.id2label
 
     @torch.inference_mode()
