@@ -30,6 +30,24 @@ docker compose up --build
 
 Runs four services: the server on 8000, Redis, Prometheus on 9090, and Grafana on 3000.
 
+### Kubernetes
+
+Requires [kind](https://kind.sigs.k8s.io/) and kubectl.
+
+```bash
+make cluster-up
+```
+
+Creates the cluster, installs metrics-server, builds and loads the images, and applies `k8s/`. The server ends up on port 30080 and Grafana on 30300.
+
+```bash
+make status        # pods and hpa
+make load-test     # sustained all-miss load
+make cluster-down
+```
+
+Two replicas by default, autoscaled to four when average CPU passes 60% of the requested 500m. Each pod pins torch to one thread so its CPU use means something to the autoscaler.
+
 ### Tests
 
 ```bash
@@ -51,10 +69,11 @@ Predictions are cached in Redis, keyed by a hash of the input text. A hit skips 
 | `REDIS_URL` | `redis://localhost:6379/0` | Cache location |
 | `CACHE_TTL_S` | `3600` | Prediction TTL |
 | `MODEL_PATH` | HF checkpoint | Local model directory to load instead |
+| `TORCH_THREADS` | unset | Threads for the forward pass. Unset lets torch size its own pool |
 
 ## Benchmarks
 
-All on an M3, single uvicorn worker, CPU.
+All on an M3, CPU. The table is a single uvicorn worker running natively.
 
 | Config | Load generator | Throughput | P50 | P99 |
 | --- | --- | --- | --- | --- |
@@ -64,7 +83,9 @@ All on an M3, single uvicorn worker, CPU.
 | Cache all-miss, 64 clients | 4 processes | 315 req/s | 187 ms | 366 ms |
 | Cache at 90% repeats, 64 clients | 4 processes | 1980 req/s | 3.8 ms | 214 ms |
 
-Batching was about 3.8x the no-batching case, and the cache about 6.3x the all-miss case. Throughput isn't comparable across the load generator column: the single-process client caps around 210 req/s, which clipped the batching peak but not the slower batch sizes, so that 3.8x needs re-measuring. Details and the correction in `benchmarks/`.
+Batching was about 3.8x the no-batching case, and the cache about 6.3x the all-miss case. That 3.8x needs re-measuring: the single-process client caps around 210 req/s, which clipped the batching peak but not the slower sizes.
+
+On the kind cluster, four replicas served 145-153 req/s against 71-106 at two, P50 794 ms down to 355 ms. Both sit below the native rows: each pod gets one torch thread and a 1-CPU limit inside Docker's VM. Scaling out mid-run is another matter. The autoscaler adds pods in under a minute, but a client holding keep-alive connections keeps using the ones it already has, so throughput doesn't move. Details and corrections in `benchmarks/`.
 
 I also checked these numbers against Agrawal et al., *On Evaluating Performance of LLM Inference Systems* ([arXiv:2507.09019](https://arxiv.org/abs/2507.09019)): [Auditing my own inference-server benchmarks](https://gist.github.com/russjm/ce38dde600b1aae380a2c9949bfd8093).
 
