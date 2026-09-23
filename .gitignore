@@ -24,7 +24,7 @@ model_local/
 *.bin
 
 # Bench artifacts
-bench/results/
+bench/results/**/locust.log
 docs/screenshots/*.png
 
 # Notes

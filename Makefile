@@ -6,7 +6,7 @@ DEP_IMAGES := prom/prometheus:v3.1.0 grafana/grafana:11.5.1 redis:7-alpine
 METRICS_SERVER := https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.9.0/components.yaml
 DEPLOYMENTS := serve redis prometheus grafana
 
-.PHONY: cluster-up cluster-down build load deploy redeploy load-test status
+.PHONY: cluster-up cluster-down build load deploy redeploy load-test status bench-all plots demo demo-down
 
 cluster-up:
 	kind create cluster --name $(CLUSTER) --config k8s/kind/cluster.yaml
@@ -57,3 +57,28 @@ load-test:
 
 cluster-down:
 	kind delete cluster --name $(CLUSTER)
+
+# the whole stack on compose, then a minute of load so grafana has something in it
+demo:
+	docker compose up -d --build
+	@for i in $$(seq 90); do curl -sf localhost:8000/health >/dev/null && break || sleep 2; done
+	@curl -s -X POST localhost:8000/predict -H 'content-type: application/json' \
+	  -d '{"text":"this movie was absolutely fantastic"}'
+	@echo
+	REPEAT_RATE=0.5 uv run locust -f bench/locustfile.py --headless --processes 4 \
+	  --host http://localhost:8000 --users 16 --spawn-rate 16 --run-time 60s
+	@echo
+	@echo "  api      http://localhost:8000/docs"
+	@echo "  metrics  http://localhost:8000/metrics"
+	@echo "  grafana  http://localhost:3000/d/ml-serve"
+	@echo "  stop     make demo-down"
+
+demo-down:
+	docker compose down
+
+# full scenario sweep (~30 min) plus the three charts the readme uses
+bench-all:
+	bash bench/run_all.sh
+
+plots:
+	uv run python bench/plot.py
